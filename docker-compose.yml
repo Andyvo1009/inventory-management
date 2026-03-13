@@ -1,0 +1,75 @@
+
+services:
+  # PostgreSQL Database
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: inventory_postgres
+  #   environment:
+  #     POSTGRES_HOST: ${DB_HOST}
+  #     POSTGRES_DB: ${DB_NAME}
+  #     POSTGRES_USER: ${DB_USER}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
+  #     POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #     - ./db/create.sql:/docker-entrypoint-initdb.d/init.sql:ro
+  #   expose:
+  #     - 5432
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - inventory_network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inventory_backend
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+    expose:
+      - "8000"
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    volumes:
+      - ./:/app:ro
+    networks:
+      - inventory_network
+    restart: unless-stopped
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./ui/app
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    container_name: inventory_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - inventory_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  inventory_network:
+    driver: bridge

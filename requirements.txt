@@ -1,0 +1,33 @@
+# InventoryManagement API Requirements
+requests==2.31.0
+# FastAPI and server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Database
+asyncpg==0.29.0
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+bcrypt==4.0.1
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Data validation
+pydantic==2.5.3
+pydantic[email]==2.5.3
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Testing
+pytest 
+pytest-cov 
+pytest-mock
+
+anyio
+pytest-asyncio
+pytest-tornasync
+pytest-trio
+pytest-twisted

@@ -1,0 +1,54 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-wheel-metadata/
+
+# Python tooling/cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+htmlcov/
+.coverage
+.coverage.*
+
+# Build/distribution
+build/
+dist/
+*.egg-info/
+
+# Logs and runtime
+*.log
+*.pid
+
+# Frontend (Vite/React app)
+ui/app/node_modules/
+ui/app/dist/
+ui/app/.vite/
+ui/app/coverage/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# IDE/editor
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
