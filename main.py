@@ -36,7 +36,7 @@ database = DB_CONFIG["database"]
 user = DB_CONFIG["user"]
 password = quote_plus(os.getenv("DB_PASSWORD"))
 
-DSN=f"postgresql://{user}:{password}@{host}:{port}/{database}"
+DSN = f"postgresql://{user}:{password}@{host}:{port}/{database}"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan - setup and teardown."""
