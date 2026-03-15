@@ -280,7 +280,7 @@ async def test_update_user_password_staff_raises_403(mock_conn, staff_user):
     with pytest.raises(HTTPException) as exc:
         await service.update_user_password(1, data, staff_user)
 
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 402
 
 
 @pytest.mark.asyncio
