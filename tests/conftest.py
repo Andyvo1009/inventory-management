@@ -7,10 +7,14 @@ connection is required. This keeps the suite fast and suitable for CI/CD.
 
 from __future__ import annotations
 
+import os
+import sys
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from models.models import (
     Category,

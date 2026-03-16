@@ -21,6 +21,8 @@ jobs:
   test:
     name: Run pytest
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: src
 
     steps:
       - name: Checkout
