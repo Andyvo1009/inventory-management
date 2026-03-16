@@ -6,8 +6,8 @@ on:
     paths:
       - "src/**"
       - ".github/workflows/ci-cd.yaml"
-    paths-ignore:
-    - "ui/**"
+    # paths-ignore:
+    # - "ui/**"
 
 env:
   AWS_REGION: ap-southeast-1
