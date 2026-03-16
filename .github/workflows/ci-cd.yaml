@@ -3,6 +3,9 @@ name: Deploy to Amazon ECS
 on:
   push:
     branches: ["main"]
+    paths:
+      - "src/**"
+      - ".github/workflows/ci-cd.yaml"
     paths-ignore:
     - "ui/**"
 
