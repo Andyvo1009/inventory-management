@@ -4,6 +4,7 @@ import {
     Package,
     Warehouse as WarehouseIcon,
     ArrowLeftRight,
+    ClipboardList,
     Users,
     Settings,
     LogOut,
@@ -17,7 +18,8 @@ const navItems = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard },
     { label: 'Products', path: '/products', icon: Package },
     { label: 'Warehouses', path: '/warehouses', icon: WarehouseIcon },
-    { label: 'Stock Movements', path: '/movements', icon: ArrowLeftRight },
+    { label: 'Operations', path: '/operations', icon: ClipboardList },
+    { label: 'Stock Movements', path: '/transactions', icon: ArrowLeftRight },
     // { label: 'Reports', path: '/reports', icon: BarChart3 },
     { label: 'Users', path: '/users', icon: Users, adminOnly: true },
 ];

@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogIn, AlertCircle } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import ErrorBox from '../components/ErrorBox';
+import { getErrorMessage } from '../api/client';
 
 export default function Login() {
     const navigate = useNavigate();
@@ -18,8 +20,8 @@ export default function Login() {
         try {
             await login({ email, password });
             navigate('/');
-        } catch (err: any) {
-            setError(err.message || 'Failed to login. Please check your credentials.');
+        } catch (err: unknown) {
+            setError(getErrorMessage(err, 'Failed to login. Please check your credentials.'));
         }
     };
 
@@ -38,10 +40,12 @@ export default function Login() {
 
                     {/* Error Message */}
                     {error && (
-                        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-                            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm text-red-800">{error}</p>
-                        </div>
+                        <ErrorBox
+                            message={error}
+                            title="Login failed"
+                            className="mb-6 border-red-200 bg-red-50 text-red-900"
+                            onClose={() => setError('')}
+                        />
                     )}
 
                     {/* Login Form */}

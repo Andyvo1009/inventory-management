@@ -11,6 +11,7 @@ import {
 import Header from '../components/Header';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ErrorBox from '../components/ErrorBox';
 import { useAuth } from '../context/AuthContext';
 import type {
     WarehouseSummary,
@@ -19,7 +20,7 @@ import type {
     WarehouseUpdateRequest,
 } from '../types';
 import * as warehousesApi from '../api/warehouses';
-import { ApiError } from '../api/client';
+import { getErrorMessage } from '../api/client';
 
 export default function Warehouses() {
     const { isAdmin } = useAuth();
@@ -36,6 +37,7 @@ export default function Warehouses() {
     const [warehouses, setWarehouses] = useState<WarehouseSummary[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
 
     // Form state for create
     const [createForm, setCreateForm] = useState<WarehouseCreateRequest>({
@@ -63,7 +65,7 @@ export default function Warehouses() {
             const response = await warehousesApi.listWarehouses();
             setWarehouses(response.warehouses);
         } catch (err) {
-            const errorMsg = err instanceof ApiError ? err.message : 'Failed to load warehouses';
+            const errorMsg = getErrorMessage(err, 'Failed to load warehouses');
             setError(errorMsg);
             console.error('Error fetching warehouses:', err);
         } finally {
@@ -74,14 +76,15 @@ export default function Warehouses() {
     const handleCreateWarehouse = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitting(true);
+        setActionError(null);
         try {
             await warehousesApi.createWarehouse(createForm);
             setShowAddModal(false);
             setCreateForm({ name: '', location: null });
             fetchWarehouses();
         } catch (err) {
-            const errorMsg = err instanceof ApiError ? err.message : 'Failed to create warehouse';
-            alert(`Error: ${errorMsg}`);
+            const errorMsg = getErrorMessage(err, 'Failed to create warehouse');
+            setActionError(errorMsg);
             console.error('Error creating warehouse:', err);
         } finally {
             setSubmitting(false);
@@ -93,6 +96,7 @@ export default function Warehouses() {
         if (!selectedWarehouse) return;
 
         setSubmitting(true);
+        setActionError(null);
         try {
             await warehousesApi.updateWarehouse(selectedWarehouse.id, updateForm);
             setShowEditModal(false);
@@ -104,8 +108,8 @@ export default function Warehouses() {
                 setSelectedWarehouse(updated);
             }
         } catch (err) {
-            const errorMsg = err instanceof ApiError ? err.message : 'Failed to update warehouse';
-            alert(`Error: ${errorMsg}`);
+            const errorMsg = getErrorMessage(err, 'Failed to update warehouse');
+            setActionError(errorMsg);
             console.error('Error updating warehouse:', err);
         } finally {
             setSubmitting(false);
@@ -120,6 +124,7 @@ export default function Warehouses() {
         if (!confirmDialog.warehouseId) return;
 
         setConfirmDialog({ isOpen: false, warehouseId: null });
+        setActionError(null);
         try {
             await warehousesApi.deleteWarehouse(confirmDialog.warehouseId);
             fetchWarehouses();
@@ -128,20 +133,21 @@ export default function Warehouses() {
                 setSelectedWarehouse(null);
             }
         } catch (err) {
-            const errorMsg = err instanceof ApiError ? err.message : 'Failed to delete warehouse';
-            alert(`Error: ${errorMsg}`);
+            const errorMsg = getErrorMessage(err, 'Failed to delete warehouse');
+            setActionError(errorMsg);
             console.error('Error deleting warehouse:', err);
         }
     };
 
     const openDetail = async (w: WarehouseSummary) => {
+        setActionError(null);
         try {
             const details = await warehousesApi.getWarehouseById(w.id);
             setSelectedWarehouse(details);
             setShowDetailModal(true);
         } catch (err) {
-            const errorMsg = err instanceof ApiError ? err.message : 'Failed to load warehouse details';
-            alert(`Error: ${errorMsg}`);
+            const errorMsg = getErrorMessage(err, 'Failed to load warehouse details');
+            setActionError(errorMsg);
             console.error('Error fetching warehouse details:', err);
         }
     };
@@ -176,8 +182,13 @@ export default function Warehouses() {
         return (
             <div>
                 <Header title="Warehouses" subtitle="Error loading warehouses" />
-                <div className="text-center py-20">
-                    <p className="text-rose-400 text-sm">{error}</p>
+                <div className="mx-auto max-w-2xl px-8 py-20">
+                    <ErrorBox
+                        message={error}
+                        title="Unable to load warehouses"
+                        className="mx-auto"
+                        onClose={() => setError(null)}
+                    />
                     <button
                         onClick={fetchWarehouses}
                         className="mt-4 px-4 py-2 rounded-lg text-sm text-white bg-white/5 hover:bg-white/10 transition-colors"
@@ -197,6 +208,16 @@ export default function Warehouses() {
                 onAddNew={isAdmin ? () => setShowAddModal(true) : undefined}
                 addNewLabel="Add Warehouse"
             />
+
+            {actionError && (
+                <div className="px-8 pb-4">
+                    <ErrorBox
+                        message={actionError}
+                        title="Request failed"
+                        onClose={() => setActionError(null)}
+                    />
+                </div>
+            )}
 
             {/* Warehouse Cards */}
             <div className="px-8 pb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

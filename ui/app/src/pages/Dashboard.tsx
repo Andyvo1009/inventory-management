@@ -165,7 +165,7 @@ export default function Dashboard() {
                                         <span className="text-slate-500 font-normal"> — {tx.type === 'Transfer' ? 'Transferred' : tx.type === 'In' ? 'Received' : 'Shipped'} </span>
                                         <span className="text-slate-300">{tx.quantity} units</span>
                                     </p>
-                                    <p className="text-xs text-slate-500 mt-0.5 truncate">{tx.notes}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5 truncate">{tx.note}</p>
                                 </div>
                                 <div className="flex items-center gap-1.5 text-xs text-slate-500 flex-shrink-0">
                                     <Clock size={12} />

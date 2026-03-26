@@ -175,7 +175,7 @@ Set these in your repository settings:
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 
-## Deployment Notes
+## Deployment note
 
 - ECS container listens on port 8000.
 - Health check calls `/` on localhost:8000.

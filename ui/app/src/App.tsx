@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
 import Warehouses from './pages/Warehouses';
+import Operations from './pages/Operations';
 import StockMovements from './pages/StockMovements';
 // import Reports from './pages/Reports';
 import UsersPage from './pages/Users';
@@ -48,6 +49,8 @@ function AppLayout() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/products" element={<Products />} />
           <Route path="/warehouses" element={<Warehouses />} />
+          <Route path="/operations" element={<Operations />} />
+          <Route path="/transactions" element={<StockMovements />} />
           <Route path="/movements" element={<StockMovements />} />
           {/* <Route path="/reports" element={<Reports />} /> */}
           <Route path="/users" element={<UsersPage />} />

@@ -1,11 +1,24 @@
-import { useState } from 'react';
-import { Building2, User, Palette, Lock, Check, AlertCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Building2, User, Palette, Lock, Check, AlertCircle, Loader2 } from 'lucide-react';
 import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
-import { tenantName } from '../data/mockData';
+import { getCurrentUserProfile } from '../api/users';
+import { getCurrentTenantProfile, type TenantResponse } from '../api/tenants';
+
+type SettingsUser = {
+    name: string;
+    email: string;
+    role: string;
+};
 
 export default function Settings() {
     const { user, changePassword } = useAuth();
+    const [settingsUser, setSettingsUser] = useState<SettingsUser | null>(
+        user ? { name: user.name, email: user.email, role: user.role } : null,
+    );
+    const [tenant, setTenant] = useState<TenantResponse | null>(null);
+    const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+    const [profileError, setProfileError] = useState<string | null>(null);
     const [showChangePassword, setShowChangePassword] = useState(false);
     const [passwordData, setPasswordData] = useState({
         old_password: '',
@@ -14,6 +27,43 @@ export default function Settings() {
     });
     const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+    useEffect(() => {
+        const fetchProfileData = async () => {
+            try {
+                setIsLoadingProfile(true);
+                setProfileError(null);
+
+                const [userResponse, tenantResponse] = await Promise.all([
+                    getCurrentUserProfile(),
+                    getCurrentTenantProfile(),
+                ]);
+
+                setSettingsUser({
+                    name: userResponse.name,
+                    email: userResponse.email,
+                    role: userResponse.role,
+                });
+                setTenant(tenantResponse);
+            } catch (error) {
+                console.error('Failed to load settings profile data:', error);
+                setProfileError('Failed to load profile information. Please refresh and try again.');
+            } finally {
+                setIsLoadingProfile(false);
+            }
+        };
+
+        fetchProfileData();
+    }, []);
+
+    const formatDate = (isoDate: string | undefined) => {
+        if (!isoDate) return '-';
+        return new Date(isoDate).toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        });
+    };
 
     const handlePasswordChange = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -53,18 +103,18 @@ export default function Settings() {
             title: 'Company Profile',
             icon: Building2,
             items: [
-                { label: 'Company Name', value: tenantName },
+                { label: 'Company Name', value: tenant?.name || '-' },
                 { label: 'Plan', value: 'Business Pro' },
-                { label: 'Member Since', value: 'January 2026' },
+                { label: 'Member Since', value: formatDate(tenant?.created_at) },
             ],
         },
         {
             title: 'Account',
             icon: User,
-            items: user ? [
-                { label: 'Name', value: user.name },
-                { label: 'Email', value: user.email },
-                { label: 'Role', value: user.role },
+            items: settingsUser ? [
+                { label: 'Name', value: settingsUser.name },
+                { label: 'Email', value: settingsUser.email },
+                { label: 'Role', value: settingsUser.role },
             ] : [],
         },
         {
@@ -82,6 +132,19 @@ export default function Settings() {
         <div>
             <Header title="Settings" subtitle="Manage your account and preferences" />
             <div className="px-8 pb-8 max-w-3xl space-y-6">
+                {isLoadingProfile && (
+                    <div className="glass-card p-4 flex items-center gap-2 text-sm text-slate-300">
+                        <Loader2 className="w-4 h-4 animate-spin text-accent-blue" />
+                        Loading account and company details...
+                    </div>
+                )}
+
+                {profileError && (
+                    <div className="glass-card p-4 text-sm text-red-400">
+                        {profileError}
+                    </div>
+                )}
+
                 {sections.map((section, i) => {
                     const Icon = section.icon;
                     return (

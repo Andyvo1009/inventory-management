@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Plus, LogOut, Settings, ChevronDown } from 'lucide-react';
+import { Plus, LogOut, Settings, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -11,7 +11,6 @@ interface HeaderProps {
 }
 
 export default function Header({ title, subtitle, onAddNew, addNewLabel }: HeaderProps) {
-    const [searchFocused, setSearchFocused] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
     const { user, logout, isAdmin } = useAuth();
     const navigate = useNavigate();
@@ -31,27 +30,6 @@ export default function Header({ title, subtitle, onAddNew, addNewLabel }: Heade
 
             {/* Right: Actions */}
             <div className="flex items-center gap-3 animate-fade-in">
-                {/* Search */}
-                <div
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all duration-300 ${searchFocused ? 'w-72' : 'w-56'
-                        }`}
-                    style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: searchFocused
-                            ? '1px solid rgba(59, 130, 246, 0.4)'
-                            : '1px solid rgba(255, 255, 255, 0.08)',
-                    }}
-                >
-                    <Search size={16} className="text-slate-400 flex-shrink-0" />
-                    <input
-                        type="text"
-                        placeholder="Search..."
-                        className="bg-transparent text-sm text-white placeholder-slate-500 outline-none w-full"
-                        onFocus={() => setSearchFocused(true)}
-                        onBlur={() => setSearchFocused(false)}
-                    />
-                </div>
-
                 {/* Notifications */}
                 {/* <button
                     className="relative w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-white transition-all"

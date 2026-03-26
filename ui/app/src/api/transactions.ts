@@ -12,7 +12,7 @@ import type {
 } from '../types';
 
 /**
- * Create a new inventory transaction (stock movement)
+ * Deprecated: create transaction write path. Prefer operations API.
  */
 export async function createTransaction(
   data: TransactionCreateRequest

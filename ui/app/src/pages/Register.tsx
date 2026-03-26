@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { UserPlus, AlertCircle } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import type { UserRole } from '../types';
+import ErrorBox from '../components/ErrorBox';
+import { getErrorMessage } from '../api/client';
 
 export default function Register() {
     const navigate = useNavigate();
@@ -42,8 +44,8 @@ export default function Register() {
                 password: formData.password
             });
             navigate('/');
-        } catch (err: any) {
-            setError(err.message || 'Failed to register. Please try again.');
+        } catch (err: unknown) {
+            setError(getErrorMessage(err, 'Failed to register. Please try again.'));
         }
     };
 
@@ -70,10 +72,12 @@ export default function Register() {
 
                     {/* Error Message */}
                     {error && (
-                        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-                            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm text-red-800">{error}</p>
-                        </div>
+                        <ErrorBox
+                            message={error}
+                            title="Registration failed"
+                            className="mb-6 border-red-200 bg-red-50 text-red-900"
+                            onClose={() => setError('')}
+                        />
                     )}
 
                     {/* Register Form */}

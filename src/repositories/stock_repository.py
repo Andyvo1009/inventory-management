@@ -15,49 +15,74 @@ class StockRepository(IStockRepository):
     def __init__(self, conn: asyncpg.Connection) -> None:
         self._conn = conn
 
-    async def get(self, product_id: int, warehouse_id: int) -> Stock | None:
+    async def get(self, product_id: int, warehouse_id: int, tenant_id: int) -> Stock | None:
         row = await self._conn.fetchrow(
             """
-            SELECT product_id, warehouse_id, quantity
-            FROM stocks
-            WHERE product_id = $1 AND warehouse_id = $2
+            SELECT s.product_id, s.warehouse_id, s.quantity
+            FROM stocks s
+            JOIN products p ON p.id = s.product_id
+            JOIN warehouses w ON w.id = s.warehouse_id
+            WHERE s.product_id = $1
+              AND s.warehouse_id = $2
+              AND p.tenant_id = $3
+              AND w.tenant_id = $3
             """,
             product_id,
             warehouse_id,
+            tenant_id,
         )
         return Stock(**row) if row else None
 
-    async def list_by_product(self, product_id: int) -> list[Stock]:
+    async def list_by_product(self, product_id: int, tenant_id: int) -> list[Stock]:
         """Get stock levels across all warehouses for a product."""
         rows = await self._conn.fetch(
             """
-            SELECT product_id, warehouse_id, quantity
-            FROM stocks
-            WHERE product_id = $1
-            ORDER BY warehouse_id
+            SELECT s.product_id, s.warehouse_id, s.quantity
+            FROM stocks s
+            JOIN products p ON p.id = s.product_id
+            JOIN warehouses w ON w.id = s.warehouse_id
+            WHERE s.product_id = $1
+              AND p.tenant_id = $2
+              AND w.tenant_id = $2
+            ORDER BY s.warehouse_id
             """,
             product_id,
+            tenant_id,
         )
         return [Stock(**r) for r in rows]
 
-    async def list_by_warehouse(self, warehouse_id: int) -> list[Stock]:
+    async def list_by_warehouse(self, warehouse_id: int, tenant_id: int) -> list[Stock]:
         """Get all product stock levels within a warehouse."""
         rows = await self._conn.fetch(
             """
-            SELECT product_id, warehouse_id, quantity
-            FROM stocks
-            WHERE warehouse_id = $1
-            ORDER BY product_id
+            SELECT s.product_id, s.warehouse_id, s.quantity
+            FROM stocks s
+            JOIN products p ON p.id = s.product_id
+            JOIN warehouses w ON w.id = s.warehouse_id
+            WHERE s.warehouse_id = $1
+              AND p.tenant_id = $2
+              AND w.tenant_id = $2
+            ORDER BY s.product_id
             """,
             warehouse_id,
+            tenant_id,
         )
         return [Stock(**r) for r in rows]
 
-    async def get_total_stock(self, product_id: int) -> int:
+    async def get_total_stock(self, product_id: int, tenant_id: int) -> int:
         """Sum stock across all warehouses for a product."""
         result = await self._conn.fetchval(
-            "SELECT COALESCE(SUM(quantity), 0) FROM stocks WHERE product_id = $1",
+            """
+            SELECT COALESCE(SUM(s.quantity), 0)
+            FROM stocks s
+            JOIN products p ON p.id = s.product_id
+            JOIN warehouses w ON w.id = s.warehouse_id
+            WHERE s.product_id = $1
+              AND p.tenant_id = $2
+              AND w.tenant_id = $2
+            """,
             product_id,
+            tenant_id,
         )
         return int(result)
 
@@ -66,6 +91,7 @@ class StockRepository(IStockRepository):
         product_id: int,
         warehouse_id: int,
         qty: int,
+        tenant_id: int,
         conn: asyncpg.Connection | None = None,
     ) -> Stock:
         """Add stock (upsert). Use the provided connection for transaction support."""
@@ -89,6 +115,7 @@ class StockRepository(IStockRepository):
         product_id: int,
         warehouse_id: int,
         qty: int,
+        tenant_id: int,
         conn: asyncpg.Connection | None = None,
     ) -> Stock:
         """Remove stock. Raises ValueError if insufficient stock."""
@@ -96,9 +123,19 @@ class StockRepository(IStockRepository):
         
         # First check current stock level
         current_stock = await c.fetchrow(
-            "SELECT product_id, warehouse_id, quantity FROM stocks WHERE product_id = $1 AND warehouse_id = $2",
+            """
+            SELECT s.product_id, s.warehouse_id, s.quantity
+            FROM stocks s
+            JOIN products p ON p.id = s.product_id
+            JOIN warehouses w ON w.id = s.warehouse_id
+            WHERE s.product_id = $1
+              AND s.warehouse_id = $2
+              AND p.tenant_id = $3
+              AND w.tenant_id = $3
+            """,
             product_id,
             warehouse_id,
+            tenant_id,
         )
         
         if current_stock is None:
@@ -116,7 +153,8 @@ class StockRepository(IStockRepository):
             """
             UPDATE stocks
             SET quantity = quantity - $3
-            WHERE product_id = $1 AND warehouse_id = $2
+            WHERE product_id = $1
+              AND warehouse_id = $2
             RETURNING product_id, warehouse_id, quantity
             """,
             product_id,
@@ -130,11 +168,21 @@ class StockRepository(IStockRepository):
         product_id: int,
         warehouse_id: int,
         quantity: int,
+        tenant_id: int,
     ) -> Stock:
         """Force-set a quantity (e.g. for stock-take / correction)."""
         row = await self._conn.fetchrow(
             """
             INSERT INTO stocks (product_id, warehouse_id, quantity)
+            SELECT $1, $2, $3
+            WHERE EXISTS (
+                SELECT 1
+                FROM products p
+                                JOIN warehouses w ON w.id = $2
+                WHERE p.id = $1
+                  AND p.tenant_id = $4
+                  AND w.tenant_id = $4
+            )
             VALUES ($1, $2, $3)
             ON CONFLICT (product_id, warehouse_id)
             DO UPDATE SET quantity = EXCLUDED.quantity
@@ -144,4 +192,3 @@ class StockRepository(IStockRepository):
             warehouse_id,
             quantity,
         )
-        return Stock(**row)

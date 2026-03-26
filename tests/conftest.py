@@ -1,8 +1,17 @@
 """
-Shared pytest fixtures for service unit tests.
+Shared pytest fixtures for service and repository unit tests.
 
-All tests are pure unit tests — repositories are mocked so no real database
-connection is required. This keeps the suite fast and suitable for CI/CD.
+All tests are pure unit tests — repositories and asyncpg connections are mocked,
+so no real database connection is required. This keeps the suite fast and
+suitable for CI/CD.
+
+Fixtures provided:
+  Users:      admin_user, staff_user
+  Domain:     sample_tenant, sample_category, sample_child_category,
+              sample_product, sample_warehouse, sample_warehouse_b
+  Operations: sample_inventory_operation, sample_inventory_transaction
+  Rows:       sample_transaction_row (dict mimicking asyncpg Record)
+  Infra:      mock_conn (AsyncMock asyncpg connection with transaction support)
 """
 
 from __future__ import annotations
@@ -18,8 +27,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from models.models import (
     Category,
+    InventoryOperation,
+    InventoryTransaction,
+    OperationStatus,
+    OperationType,
     Product,
     Tenant,
+    TransactionStatus,
     TransactionType,
     User,
     UserRole,
@@ -100,6 +114,10 @@ def sample_warehouse_b() -> Warehouse:
 
 @pytest.fixture
 def sample_transaction_row() -> dict:
+    """
+    A dict that mimics an asyncpg Record for a single inventory transaction.
+    Includes all fields required by TransactionResponse (operation_id, movement_status).
+    """
     return {
         "id": 1,
         "tenant_id": 1,
@@ -107,6 +125,7 @@ def sample_transaction_row() -> dict:
         "product_id": 1,
         "product_name": "Test Product",
         "product_sku": "SKU-001",
+        "operation_id": 1,
         "quantity": 10,
         "origin_warehouse_id": None,
         "origin_warehouse_name": None,
@@ -114,9 +133,49 @@ def sample_transaction_row() -> dict:
         "des_warehouse_name": "Main Warehouse",
         "user_id": 1,
         "user_name": "Admin User",
-        "notes": None,
+        "note": None,
         "timestamp": datetime(2024, 6, 1, 12, 0, 0),
+        "movement_status": "Completed",
     }
+
+
+# ─── Operation / Transaction domain objects ───────────────────────────────────
+
+
+@pytest.fixture
+def sample_inventory_operation() -> InventoryOperation:
+    """A PENDING PURCHASE operation with one destination warehouse."""
+    return InventoryOperation(
+        id=1,
+        tenant_id=1,
+        user_id=1,
+        operation_type=OperationType.PURCHASE,
+        status=OperationStatus.PENDING,
+        source_warehouse_id=None,
+        destination_warehouse_id=1,
+        reference_code=None,
+        note=None,
+        created_at=datetime(2026, 3, 1),
+        updated_at=datetime(2026, 3, 1),
+    )
+
+
+@pytest.fixture
+def sample_inventory_transaction() -> InventoryTransaction:
+    """A single PENDING IN transaction belonging to operation 1."""
+    return InventoryTransaction(
+        id=1,
+        tenant_id=1,
+        operation_id=1,
+        product_id=1,
+        user_id=1,
+        warehouse_id=1,
+        type=TransactionType.IN,
+        quantity=10,
+        note=None,
+        timestamp=datetime(2026, 3, 1),
+        movement_status=TransactionStatus.PENDING,
+    )
 
 
 # ─── asyncpg connection mock ─────────────────────────────────────────────────

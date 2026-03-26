@@ -1,6 +1,9 @@
 // ===== Enums =====
 export type UserRole = 'Admin' | 'Staff';
 export type TransactionType = 'In' | 'Out' | 'Transfer';
+export type OperationType = 'Purchase' | 'Sale' | 'Transfer' | 'Adjustment' | 'Return';
+export type OperationStatus = 'Draft' | 'Pending' | 'In_Transit' | 'Completed' | 'Cancelled' | 'Failed';
+export type MovementStatus = 'Draft' | 'Pending' | 'Completed' | 'Failed';
 
 // ===== Core Models =====
 export interface Tenant {
@@ -62,7 +65,7 @@ export interface InventoryTransaction {
     destWarehouseId: number | null;
     type: TransactionType;
     quantity: number;
-    notes: string;
+    note: string;
     timestamp: string;
     productName?: string;
     userName?: string;
@@ -110,7 +113,7 @@ export interface TransactionDetail {
     des_warehouse_name: string | null;
     type: TransactionType;
     quantity: number;
-    notes: string;
+    note: string;
     timestamp: string;
     user_id: number | null;
     user_name: string | null;
@@ -234,7 +237,7 @@ export interface TransactionCreateRequest {
     quantity: number;
     origin_warehouse_id?: number | null;
     des_warehouse_id?: number | null;
-    notes?: string | null;
+    note?: string | null;
 }
 
 export interface TransactionResponse {
@@ -244,6 +247,7 @@ export interface TransactionResponse {
     product_id: number;
     product_name: string;
     product_sku: string;
+    operation_id: number;
     quantity: number;
     origin_warehouse_id: number | null;
     origin_warehouse_name: string | null;
@@ -251,12 +255,69 @@ export interface TransactionResponse {
     des_warehouse_name: string | null;
     user_id: number | null;
     user_name: string | null;
-    notes: string | null;
+    note: string | null;
     timestamp: string;
+    movement_status: MovementStatus;
 }
 
 export interface TransactionListResponse {
     transactions: TransactionResponse[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
+// ===== Operation API Request/Response Types =====
+export interface OperationItemCreateRequest {
+    product_id: number;
+    type: TransactionType;
+    warehouse_id: number;
+    quantity: number;
+}
+
+export interface OperationCreateRequest {
+    operation_type: OperationType;
+    source_warehouse_id: number | null;
+    destination_warehouse_id: number | null;
+    reference_code?: string | null;
+    note?: string | null;
+    status?: OperationStatus;
+    items: OperationItemCreateRequest[];
+}
+
+export interface OperationItemResponse {
+    id: number;
+    operation_id: number;
+    product_id: number;
+    product_name: string;
+    product_sku: string;
+    type: TransactionType;
+    warehouse_id: number | null;
+    warehouse_name: string | null;
+    quantity: number;
+    movement_status: MovementStatus;
+}
+
+export interface OperationResponse {
+    id: number;
+    tenant_id: number;
+    operation_type: OperationType;
+    status: OperationStatus;
+    source_warehouse_id: number | null;
+    source_warehouse_name: string | null;
+    destination_warehouse_id: number | null;
+    destination_warehouse_name: string | null;
+    user_id: number | null;
+    user_name: string | null;
+    reference_code: string | null;
+    note: string | null;
+    created_at: string;
+    updated_at: string;
+    items: OperationItemResponse[];
+}
+
+export interface OperationListResponse {
+    operations: OperationResponse[];
     total: number;
     limit: number;
     offset: number;

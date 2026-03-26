@@ -1,8 +1,32 @@
 """
 Unit tests for TransactionService.
 
-Covers: create transaction (IN / OUT / TRANSFER), warehouse/product validation,
-stock mutations, insufficient-stock guard, list, and get by ID.
+TransactionService is a thin read-only façade over TransactionRepository.
+Direct transaction creation via this service was deprecated in favour of the
+operation-first workflow; `create_transaction` now unconditionally raises
+HTTP 410 Gone.
+
+Coverage map
+─────────────────────────────────────────────────────────────────────────────
+create_transaction
+  • Always raises HTTP 410 Gone regardless of payload              (1 test)
+  • No repository or stock side-effects are triggered             (1 test)
+
+get_transaction_by_id
+  • Returns TransactionResponse when the transaction exists        (1 test)
+  • Raises HTTP 404 when the transaction does not exist           (1 test)
+
+list_transactions
+  • Returns a populated TransactionListResponse                   (1 test)
+  • Forwards all filter parameters verbatim to the repository     (1 test)
+  • Returns total=0 and empty list when no rows match             (1 test)
+  • Warehouse filter is forwarded correctly                       (1 test)
+
+list_transactions_by_operation
+  • Returns all transactions for the given operation              (1 test)
+  • Returns total=0 when the operation has no transactions        (1 test)
+  • limit equals len(transactions), offset is always 0           (1 test)
+─────────────────────────────────────────────────────────────────────────────
 """
 
 from __future__ import annotations
@@ -14,7 +38,11 @@ import pytest
 from fastapi import HTTPException
 
 from models.models import TransactionType
-from schemas.transaction_schema import TransactionCreateRequest, TransactionListRequest
+from schemas.transaction_schema import (
+    TransactionCreateRequest,
+    TransactionListRequest,
+    TransactionResponse,
+)
 from services.transaction_service import TransactionService
 
 
@@ -28,6 +56,7 @@ def _make_service(
     warehouse_repo=None,
     stock_repo=None,
 ) -> TransactionService:
+    """Construct a TransactionService with every dependency replaced by mocks."""
     return TransactionService(
         mock_conn,
         transaction_repo=transaction_repo or AsyncMock(),
@@ -43,7 +72,16 @@ def _transaction_row(
     origin_name: str | None = None,
     dest_id: int | None = 1,
     dest_name: str | None = "Main Warehouse",
+    operation_id: int = 1,
+    movement_status: str = "Completed",
 ) -> dict:
+    """
+    Build a dict that satisfies TransactionResponse validation.
+
+    All fields required by TransactionResponse are present, including
+    `operation_id` and `movement_status` which were added to the schema
+    after the operation-first workflow was introduced.
+    """
     return {
         "id": 1,
         "tenant_id": 1,
@@ -51,6 +89,7 @@ def _transaction_row(
         "product_id": 1,
         "product_name": "Test Product",
         "product_sku": "SKU-001",
+        "operation_id": operation_id,
         "quantity": 10,
         "origin_warehouse_id": origin_id,
         "origin_warehouse_name": origin_name,
@@ -58,36 +97,30 @@ def _transaction_row(
         "des_warehouse_name": dest_name,
         "user_id": 1,
         "user_name": "Admin User",
-        "notes": None,
+        "note": None,
         "timestamp": datetime(2024, 6, 1, 12, 0, 0),
+        "movement_status": movement_status,
     }
 
 
-# ─── create_transaction: IN ──────────────────────────────────────────────────
+def _make_tx_response(**kwargs) -> TransactionResponse:
+    """Return a TransactionResponse built from _transaction_row defaults, with overrides."""
+    return TransactionResponse(**{**_transaction_row(), **kwargs})
+
+
+# ─── create_transaction (deprecated — always HTTP 410) ───────────────────────
 
 
 @pytest.mark.asyncio
-async def test_create_in_transaction_success(
-    mock_conn, admin_user, sample_warehouse, sample_transaction_row
-):
-    # Product exists
-    mock_conn.fetchrow.side_effect = [
-        {"id": 1},             # product check
-        sample_transaction_row,  # final SELECT
-    ]
+async def test_create_transaction_raises_410(mock_conn, admin_user):
+    """
+    create_transaction must raise HTTP 410 Gone.
 
-    warehouse_repo = AsyncMock()
-    warehouse_repo.get_by_id.return_value = sample_warehouse
-
-    stock_repo = AsyncMock()
-    transaction_repo = AsyncMock()
-
-    service = _make_service(
-        mock_conn,
-        transaction_repo=transaction_repo,
-        warehouse_repo=warehouse_repo,
-        stock_repo=stock_repo,
-    )
+    Direct transaction creation was removed in favour of the operation-first
+    workflow (/api/operations).  Any call — regardless of the payload — must
+    immediately raise HTTP 410 and never reach the repository layer.
+    """
+    service = _make_service(mock_conn)
     data = TransactionCreateRequest(
         product_id=1,
         type=TransactionType.IN,
@@ -95,64 +128,32 @@ async def test_create_in_transaction_success(
         des_warehouse_id=1,
     )
 
-    result = await service.create_transaction(data, admin_user)
-
-    assert result.type == TransactionType.IN
-    assert result.quantity == 10
-    stock_repo.increment.assert_called_once_with(
-        product_id=1, warehouse_id=1, qty=10, conn=mock_conn
-    )
-    transaction_repo.record.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_create_in_transaction_missing_dest_raises_400(
-    mock_conn, admin_user
-):
-    mock_conn.fetchrow.return_value = {"id": 1}  # product exists
-
-    service = _make_service(mock_conn)
-    data = TransactionCreateRequest(
-        product_id=1,
-        type=TransactionType.IN,
-        quantity=5,
-        des_warehouse_id=None,  # missing
-    )
-
     with pytest.raises(HTTPException) as exc:
         await service.create_transaction(data, admin_user)
 
-    assert exc.value.status_code == 400
-    assert "des_warehouse_id" in exc.value.detail
-
-
-# ─── create_transaction: OUT ─────────────────────────────────────────────────
+    assert exc.value.status_code == 410
+    assert "deprecated" in exc.value.detail.lower()
 
 
 @pytest.mark.asyncio
-async def test_create_out_transaction_success(
-    mock_conn, admin_user, sample_warehouse
-):
-    out_row = _transaction_row(
-        tx_type=TransactionType.OUT,
-        origin_id=1,
-        origin_name="Main Warehouse",
-        dest_id=None,
-        dest_name=None,
-    )
-    mock_conn.fetchrow.side_effect = [{"id": 1}, out_row]
+async def test_create_transaction_has_no_side_effects(mock_conn, admin_user):
+    """
+    create_transaction must not call any repository or stock-mutation method.
 
-    warehouse_repo = AsyncMock()
-    warehouse_repo.get_by_id.return_value = sample_warehouse
-
-    stock_repo = AsyncMock()
+    Because the endpoint raises 410 before any business logic runs, all
+    injected mocks must remain uncalled.
+    """
     transaction_repo = AsyncMock()
+    stock_repo = AsyncMock()
+    product_repo = AsyncMock()
+    warehouse_repo = AsyncMock()
 
     service = _make_service(
         mock_conn,
         transaction_repo=transaction_repo,
-        warehouse_repo=warehouse_repo,
         stock_repo=stock_repo,
+        product_repo=product_repo,
+        warehouse_repo=warehouse_repo,
     )
     data = TransactionCreateRequest(
         product_id=1,
@@ -161,198 +162,14 @@ async def test_create_out_transaction_success(
         origin_warehouse_id=1,
     )
 
-    result = await service.create_transaction(data, admin_user)
-
-    assert result.type == TransactionType.OUT
-    stock_repo.decrement.assert_called_once_with(
-        product_id=1, warehouse_id=1, qty=5, conn=mock_conn
-    )
-
-
-@pytest.mark.asyncio
-async def test_create_out_transaction_missing_origin_raises_400(
-    mock_conn, admin_user
-):
-    mock_conn.fetchrow.return_value = {"id": 1}
-
-    service = _make_service(mock_conn)
-    data = TransactionCreateRequest(
-        product_id=1,
-        type=TransactionType.OUT,
-        quantity=5,
-        origin_warehouse_id=None,  # missing
-    )
-
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(HTTPException):
         await service.create_transaction(data, admin_user)
 
-    assert exc.value.status_code == 400
-    assert "origin_warehouse_id" in exc.value.detail
-
-
-@pytest.mark.asyncio
-async def test_create_out_transaction_insufficient_stock_raises_400(
-    mock_conn, admin_user, sample_warehouse
-):
-    mock_conn.fetchrow.return_value = {"id": 1}
-
-    warehouse_repo = AsyncMock()
-    warehouse_repo.get_by_id.return_value = sample_warehouse
-
-    stock_repo = AsyncMock()
-    stock_repo.decrement.side_effect = ValueError("Insufficient stock")
-
-    service = _make_service(
-        mock_conn,
-        warehouse_repo=warehouse_repo,
-        stock_repo=stock_repo,
-    )
-    data = TransactionCreateRequest(
-        product_id=1,
-        type=TransactionType.OUT,
-        quantity=9999,
-        origin_warehouse_id=1,
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        await service.create_transaction(data, admin_user)
-
-    assert exc.value.status_code == 400
-    assert "Insufficient" in exc.value.detail
-
-
-# ─── create_transaction: TRANSFER ────────────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_create_transfer_transaction_success(
-    mock_conn, admin_user, sample_warehouse, sample_warehouse_b
-):
-    transfer_row = _transaction_row(
-        tx_type=TransactionType.TRANSFER,
-        origin_id=1,
-        origin_name="Main Warehouse",
-        dest_id=2,
-        dest_name="Secondary Warehouse",
-    )
-    mock_conn.fetchrow.side_effect = [{"id": 1}, transfer_row]
-
-    warehouse_repo = AsyncMock()
-    warehouse_repo.get_by_id.side_effect = [sample_warehouse, sample_warehouse_b]
-
-    stock_repo = AsyncMock()
-    transaction_repo = AsyncMock()
-
-    service = _make_service(
-        mock_conn,
-        transaction_repo=transaction_repo,
-        warehouse_repo=warehouse_repo,
-        stock_repo=stock_repo,
-    )
-    data = TransactionCreateRequest(
-        product_id=1,
-        type=TransactionType.TRANSFER,
-        quantity=10,
-        origin_warehouse_id=1,
-        des_warehouse_id=2,
-    )
-
-    result = await service.create_transaction(data, admin_user)
-
-    assert result.type == TransactionType.TRANSFER
-    stock_repo.decrement.assert_called_once_with(
-        product_id=1, warehouse_id=1, qty=10, conn=mock_conn
-    )
-    stock_repo.increment.assert_called_once_with(
-        product_id=1, warehouse_id=2, qty=10, conn=mock_conn
-    )
-
-
-@pytest.mark.asyncio
-async def test_create_transfer_missing_warehouses_raises_400(mock_conn, admin_user):
-    mock_conn.fetchrow.return_value = {"id": 1}
-
-    service = _make_service(mock_conn)
-    data = TransactionCreateRequest(
-        product_id=1,
-        type=TransactionType.TRANSFER,
-        quantity=5,
-        origin_warehouse_id=None,  # missing both
-        des_warehouse_id=None,
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        await service.create_transaction(data, admin_user)
-
-    assert exc.value.status_code == 400
-
-
-@pytest.mark.asyncio
-async def test_create_transfer_same_warehouse_raises_400(
-    mock_conn, admin_user
-):
-    mock_conn.fetchrow.return_value = {"id": 1}
-
-    service = _make_service(mock_conn)
-    data = TransactionCreateRequest(
-        product_id=1,
-        type=TransactionType.TRANSFER,
-        quantity=5,
-        origin_warehouse_id=1,
-        des_warehouse_id=1,  # same as origin
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        await service.create_transaction(data, admin_user)
-
-    assert exc.value.status_code == 400
-    assert "different" in exc.value.detail
-
-
-# ─── create_transaction: product / warehouse not found ───────────────────────
-
-
-@pytest.mark.asyncio
-async def test_create_transaction_product_not_found_raises_404(
-    mock_conn, admin_user
-):
-    mock_conn.fetchrow.return_value = None  # product not found
-
-    service = _make_service(mock_conn)
-    data = TransactionCreateRequest(
-        product_id=999,
-        type=TransactionType.IN,
-        quantity=5,
-        des_warehouse_id=1,
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        await service.create_transaction(data, admin_user)
-
-    assert exc.value.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_create_in_transaction_dest_warehouse_not_found_raises_404(
-    mock_conn, admin_user
-):
-    mock_conn.fetchrow.return_value = {"id": 1}  # product exists
-
-    warehouse_repo = AsyncMock()
-    warehouse_repo.get_by_id.return_value = None  # warehouse missing
-
-    service = _make_service(mock_conn, warehouse_repo=warehouse_repo)
-    data = TransactionCreateRequest(
-        product_id=1,
-        type=TransactionType.IN,
-        quantity=5,
-        des_warehouse_id=99,
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        await service.create_transaction(data, admin_user)
-
-    assert exc.value.status_code == 404
+    transaction_repo.record.assert_not_called()
+    stock_repo.decrement.assert_not_called()
+    stock_repo.increment.assert_not_called()
+    product_repo.get_by_id.assert_not_called()
+    warehouse_repo.get_by_id.assert_not_called()
 
 
 # ─── get_transaction_by_id ───────────────────────────────────────────────────
@@ -362,22 +179,31 @@ async def test_create_in_transaction_dest_warehouse_not_found_raises_404(
 async def test_get_transaction_by_id_success(
     mock_conn, admin_user, sample_transaction_row
 ):
-    from schemas.transaction_schema import TransactionResponse
-
+    """
+    get_transaction_by_id returns the TransactionResponse from the repository
+    when the requested transaction exists for the caller's tenant.
+    """
+    expected = TransactionResponse(**sample_transaction_row)
     transaction_repo = AsyncMock()
-    transaction_repo.get_by_id_detailed.return_value = TransactionResponse(
-        **sample_transaction_row
-    )
+    transaction_repo.get_by_id_detailed.return_value = expected
 
     service = _make_service(mock_conn, transaction_repo=transaction_repo)
     result = await service.get_transaction_by_id(1, admin_user)
 
     assert result.id == 1
     assert result.product_sku == "SKU-001"
+    assert result.type == TransactionType.IN
+    transaction_repo.get_by_id_detailed.assert_awaited_once_with(
+        tx_id=1, tenant_id=admin_user.tenant_id
+    )
 
 
 @pytest.mark.asyncio
 async def test_get_transaction_by_id_not_found_raises_404(mock_conn, admin_user):
+    """
+    get_transaction_by_id raises HTTP 404 when the repository returns None,
+    meaning no transaction with that ID exists in the caller's tenant.
+    """
     transaction_repo = AsyncMock()
     transaction_repo.get_by_id_detailed.return_value = None
 
@@ -393,19 +219,17 @@ async def test_get_transaction_by_id_not_found_raises_404(mock_conn, admin_user)
 
 
 @pytest.mark.asyncio
-async def test_list_transactions_success(
-    mock_conn, admin_user, sample_transaction_row
-):
-    from schemas.transaction_schema import TransactionResponse
-
+async def test_list_transactions_success(mock_conn, admin_user, sample_transaction_row):
+    """
+    list_transactions wraps the repository result in a TransactionListResponse
+    with total equal to the number of returned rows.
+    """
     tx = TransactionResponse(**sample_transaction_row)
     transaction_repo = AsyncMock()
     transaction_repo.list_by_tenant.return_value = [tx]
 
     service = _make_service(mock_conn, transaction_repo=transaction_repo)
-    filters = TransactionListRequest()
-
-    result = await service.list_transactions(filters, admin_user)
+    result = await service.list_transactions(TransactionListRequest(), admin_user)
 
     assert result.total == 1
     assert result.transactions[0].product_sku == "SKU-001"
@@ -413,22 +237,137 @@ async def test_list_transactions_success(
 
 @pytest.mark.asyncio
 async def test_list_transactions_with_filters(mock_conn, admin_user):
+    """
+    list_transactions forwards all filter fields — type, warehouse_id, product_id,
+    limit, offset — verbatim to the repository without any transformation.
+    """
     transaction_repo = AsyncMock()
     transaction_repo.list_by_tenant.return_value = []
 
     service = _make_service(mock_conn, transaction_repo=transaction_repo)
     filters = TransactionListRequest(
-        type=TransactionType.IN, product_id=1, limit=10, offset=0
+        type=TransactionType.IN,
+        product_id=1,
+        limit=10,
+        offset=5,
     )
 
     result = await service.list_transactions(filters, admin_user)
 
-    transaction_repo.list_by_tenant.assert_called_once_with(
+    transaction_repo.list_by_tenant.assert_awaited_once_with(
         tenant_id=admin_user.tenant_id,
         type=TransactionType.IN,
         warehouse_id=None,
         product_id=1,
         limit=10,
-        offset=0,
+        offset=5,
     )
     assert result.total == 0
+    assert result.limit == 10
+    assert result.offset == 5
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_empty_results(mock_conn, admin_user):
+    """
+    list_transactions with no matching rows returns total=0 and an empty list.
+    This verifies the service handles the empty-set case without raising.
+    """
+    transaction_repo = AsyncMock()
+    transaction_repo.list_by_tenant.return_value = []
+
+    service = _make_service(mock_conn, transaction_repo=transaction_repo)
+    result = await service.list_transactions(TransactionListRequest(), admin_user)
+
+    assert result.total == 0
+    assert result.transactions == []
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_warehouse_filter_forwarded(mock_conn, admin_user):
+    """
+    When a warehouse_id filter is provided, it is forwarded to list_by_tenant
+    without modification so the repository can apply the correct WHERE clause.
+    """
+    transaction_repo = AsyncMock()
+    transaction_repo.list_by_tenant.return_value = []
+
+    service = _make_service(mock_conn, transaction_repo=transaction_repo)
+    filters = TransactionListRequest(warehouse_id=7)
+
+    await service.list_transactions(filters, admin_user)
+
+    _, kwargs = transaction_repo.list_by_tenant.call_args
+    assert kwargs["warehouse_id"] == 7
+
+
+# ─── list_transactions_by_operation ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_by_operation_success(
+    mock_conn, admin_user, sample_transaction_row
+):
+    """
+    list_transactions_by_operation returns all transaction rows that belong
+    to the given operation_id, wrapped in a TransactionListResponse.
+    total equals the length of the returned list.
+    """
+    tx = TransactionResponse(**sample_transaction_row)
+    transaction_repo = AsyncMock()
+    transaction_repo.list_by_operation.return_value = [tx]
+
+    service = _make_service(mock_conn, transaction_repo=transaction_repo)
+    result = await service.list_transactions_by_operation(
+        operation_id=1, current_user=admin_user
+    )
+
+    assert result.total == 1
+    assert result.transactions[0].id == 1
+    transaction_repo.list_by_operation.assert_awaited_once_with(
+        operation_id=1, tenant_id=admin_user.tenant_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_by_operation_empty(mock_conn, admin_user):
+    """
+    list_transactions_by_operation returns total=0 and an empty list when
+    the operation has no associated transactions.
+    """
+    transaction_repo = AsyncMock()
+    transaction_repo.list_by_operation.return_value = []
+
+    service = _make_service(mock_conn, transaction_repo=transaction_repo)
+    result = await service.list_transactions_by_operation(
+        operation_id=42, current_user=admin_user
+    )
+
+    assert result.total == 0
+    assert result.transactions == []
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_by_operation_limit_equals_count(
+    mock_conn, admin_user, sample_transaction_row
+):
+    """
+    list_transactions_by_operation sets limit to len(transactions) and
+    offset to 0, because this endpoint always returns all rows for the
+    operation without pagination.
+    """
+    txs = [
+        TransactionResponse(**{**sample_transaction_row, "id": i})
+        for i in range(1, 4)
+    ]
+    transaction_repo = AsyncMock()
+    transaction_repo.list_by_operation.return_value = txs
+
+    service = _make_service(mock_conn, transaction_repo=transaction_repo)
+    result = await service.list_transactions_by_operation(
+        operation_id=1, current_user=admin_user
+    )
+
+    assert result.total == 3
+    assert result.limit == 3
+    assert result.offset == 0

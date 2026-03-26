@@ -38,6 +38,15 @@ export const API_ENDPOINTS = {
     CREATE: '/api/transactions/',
     GET: (id: number) => `/api/transactions/${id}`,
   },
+  OPERATIONS: {
+    LIST: '/api/operations/',
+    CREATE: '/api/operations/',
+    GET: (id: number) => `/api/operations/${id}`,
+    COMPLETE: (id: number) => `/api/operations/${id}/complete`,
+    UPDATE_STATUS: (id: number) => `/api/operations/${id}/status`,
+    COMPLETE_TRANSACTION: (operationId: number, transactionId: number) => `/api/operations/${operationId}/transactions/${transactionId}/complete`,
+    FAIL_TRANSACTION: (operationId: number, transactionId: number) => `/api/operations/${operationId}/transactions/${transactionId}/fail`,
+  },
   USERS: {
     LIST: '/api/users/',
     CREATE: '/api/users/',
@@ -47,6 +56,9 @@ export const API_ENDPOINTS = {
     UPDATE: (id: number) => `/api/users/${id}`,
     UPDATE_PASSWORD: (id: number) => `/api/users/${id}/password`,
     DELETE: (id: number) => `/api/users/${id}`,
+  },
+  TENANTS: {
+    ME: '/api/tenants/me',
   },
   CATEGORIES: {
     LIST: '/api/categories/',

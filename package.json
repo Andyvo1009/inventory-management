@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "jsx-runtime": "^1.2.0",
+    "lucide-react": "^1.0.1",
+    "react-router-dom": "^7.13.2"
+  }
+}

@@ -172,7 +172,7 @@ interface UserResponse {
 }
 ```
 
-## Security Notes
+## Security note
 
 - Tokens are stored in `localStorage` (consider `httpOnly` cookies for production)
 - All authenticated requests include `Bearer` token in Authorization header

@@ -63,7 +63,7 @@ export default function Reports() {
             key: 'timestamp', label: 'Date',
             render: (tx) => (<div className="flex items-center gap-1.5 text-sm text-slate-300"><Clock size={13} className="text-slate-500" />{new Date(tx.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>),
         },
-        { key: 'notes', label: 'Notes', render: (tx) => <span className="text-xs text-slate-500 block max-w-[200px] truncate">{tx.notes}</span> },
+        { key: 'note', label: 'note', render: (tx) => <span className="text-xs text-slate-500 block max-w-[200px] truncate">{tx.note}</span> },
     ];
 
     return (

@@ -24,6 +24,29 @@ class TransactionType(str, Enum):
     TRANSFER = "Transfer"
 
 
+class OperationType(str, Enum):
+    PURCHASE = "Purchase"
+    SALE = "Sale"
+    TRANSFER = "Transfer"
+    ADJUSTMENT = "Adjustment"
+    RETURN = "Return"
+
+
+class TransactionStatus(str, Enum):
+    DRAFT = "Draft"
+    PENDING = "Pending"
+    COMPLETED = "Completed"
+    FAILED = "Failed"
+
+
+class OperationStatus(str, Enum):
+    DRAFT = "Draft"
+    PENDING = "Pending"
+    IN_TRANSIT = "In_Transit"
+    COMPLETED = "Completed"
+    CANCELLED = "Cancelled"
+    FAILED = "Failed"
+
 # ─── Tenant ──────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -89,18 +112,35 @@ class Stock:
 
 # ─── Inventory Transaction ──────────────────────────────────────────────────
 
+
+@dataclass
+class InventoryOperation:
+    id: int
+    tenant_id: int
+    user_id: int | None
+    operation_type: OperationType
+    status: OperationStatus
+    source_warehouse_id: int | None
+    destination_warehouse_id: int | None
+    reference_code: str | None
+    note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 @dataclass
 class InventoryTransaction:
     id: int
     tenant_id: int
+    operation_id: int | None
     product_id: int
     user_id: int | None
-    origin_warehouse_id: int | None
-    des_warehouse_id: int | None
+    warehouse_id: int | None
     type: TransactionType
     quantity: int
-    notes: str | None
+    note: str | None
     timestamp: datetime
+    movement_status: TransactionStatus
 
 
 # ─── Report DTOs ─────────────────────────────────────────────────────────────
@@ -119,8 +159,7 @@ class MovementHistoryRow:
     id: int
     type: TransactionType
     quantity: int
-    origin_warehouse_id: int | None
-    des_warehouse_id: int | None
+    warehouse_id: int | None
     user_id: int | None
-    notes: str | None
+    note: str | None
     timestamp: datetime

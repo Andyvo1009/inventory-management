@@ -30,8 +30,8 @@ class ReportRepository(IReportRepository):
         """
         rows = await self._conn.fetch(
             """
-            SELECT id, type, quantity, origin_warehouse_id, des_warehouse_id,
-                   user_id, notes, timestamp
+            SELECT id, type, quantity, warehouse_id,
+                   user_id, note, timestamp
             FROM inventory_transactions
             WHERE product_id = $1 AND tenant_id = $2
             ORDER BY timestamp DESC
@@ -47,10 +47,9 @@ class ReportRepository(IReportRepository):
                 id=r["id"],
                 type=TransactionType(r["type"]),
                 quantity=r["quantity"],
-                origin_warehouse_id=r["origin_warehouse_id"],
-                des_warehouse_id=r["des_warehouse_id"],
+                warehouse_id=r["warehouse_id"],
                 user_id=r["user_id"],
-                notes=r["notes"],
+                note=r["note"],
                 timestamp=r["timestamp"],
             )
             for r in rows

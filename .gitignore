@@ -41,7 +41,8 @@ ui/app/node_modules/
 ui/app/dist/
 ui/app/.vite/
 ui/app/coverage/
-
+node_modules/
+dist/
 # TypeScript build info
 *.tsbuildinfo
 

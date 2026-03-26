@@ -72,9 +72,10 @@ class DashboardRepository(IDashboardRepository):
                 ow.name AS origin_warehouse_name,
                 dw.name AS des_warehouse_name
             FROM inventory_transactions t
-            left JOIN products p ON t.product_id = p.id
-            LEFT JOIN warehouses ow ON t.origin_warehouse_id = ow.id
-            LEFT JOIN warehouses dw ON t.des_warehouse_id = dw.id
+                        LEFT JOIN products p ON t.product_id = p.id
+                        LEFT JOIN inventory_operations o ON t.operation_id = o.id
+                        LEFT JOIN warehouses ow ON o.source_warehouse_id = ow.id
+                        LEFT JOIN warehouses dw ON o.destination_warehouse_id = dw.id
             WHERE t.tenant_id = $1
             ORDER BY t.timestamp DESC
             LIMIT $2 OFFSET $3

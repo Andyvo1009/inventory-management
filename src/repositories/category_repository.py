@@ -126,7 +126,7 @@ class CategoryRepository(ICategoryRepository):
                 c.name AS category_name,
                 COUNT(p.id) AS product_count
             FROM categories c
-            LEFT JOIN products p ON p.category_id = c.id AND p.tenant_id = $1
+                        LEFT JOIN products p ON p.category_id = c.id
             WHERE c.tenant_id = $1
             GROUP BY c.id, c.name
             

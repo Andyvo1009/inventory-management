@@ -44,7 +44,7 @@ class ProductRepository(IProductRepository):
             """
             SELECT p.id, p.tenant_id, p.category_id, p.sku, p.name, p.description, p.reorder_point, c.name AS category_name
             FROM products p
-            LEFT JOIN categories c ON p.category_id = c.id
+                        LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.id = $1 AND p.tenant_id = $2
             """,
             product_id,
@@ -77,7 +77,7 @@ class ProductRepository(IProductRepository):
             """
             SELECT p.id, p.tenant_id, p.category_id, p.sku, p.name, p.description, p.reorder_point, c.name AS category_name
             FROM products p
-            left join categories c on p.category_id = c.id
+                        LEFT JOIN categories c ON p.category_id = c.id
             WHERE p.tenant_id = $1
               AND ($2::INTEGER IS NULL OR p.category_id = $2)
               AND ($3::TEXT IS NULL OR p.name ILIKE '%' || $3 || '%' OR p.sku ILIKE '%' || $3 || '%')

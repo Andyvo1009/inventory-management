@@ -224,7 +224,7 @@ class AuthService:
         new_password_hash = hash_password(data.new_password)
 
         # Update password via repository
-        await self._user_repo.update_password(user.id, new_password_hash)
+        await self._user_repo.update_password(user.id, user.tenant_id, new_password_hash)
 
     @staticmethod
     def validate_admin_role(user: User) -> None:

@@ -6,16 +6,18 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, Depends, Query, Response, status
 
-from models.models import User, TransactionType
+from models.models import OperationType, User, TransactionType
+from schemas.operation_schema import OperationCreateRequest, OperationItemCreateRequest
 from schemas.transaction_schema import (
     TransactionCreateRequest,
     TransactionListRequest,
     TransactionResponse,
     TransactionListResponse,
 )
-from core.dependencies import get_transaction_service, get_current_user
+from core.dependencies import get_current_user, get_operation_service, get_transaction_service
+from services.operation_service import OperationService
 from services.transaction_service import TransactionService
 
 # ─── Configuration ───────────────────────────────────────────────────────────
@@ -29,11 +31,13 @@ router = APIRouter(prefix="/api/transactions", tags=["Transactions"])
 @router.post("/", response_model=TransactionResponse, status_code=status.HTTP_201_CREATED)
 async def create_transaction(
     data: TransactionCreateRequest,
+    response: Response,
     current_user: Annotated[User, Depends(get_current_user)],
+    operation_service: Annotated[OperationService, Depends(get_operation_service)],
     transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
 ) -> TransactionResponse:
     """
-    Create a new inventory transaction (stock movement).
+    Deprecated: create a transaction via an operation compatibility adapter.
     
     Transaction types and requirements:
     - **IN**: Requires des_warehouse_id (receiving stock)
@@ -46,11 +50,71 @@ async def create_transaction(
     - **quantity**: Quantity to move (must be positive)
     - **origin_warehouse_id**: Source warehouse (for OUT and TRANSFER)
     - **des_warehouse_id**: Destination warehouse (for IN and TRANSFER)
-    - **notes**: Optional notes about the transaction
+    - **note**: Optional note about the transaction
     
     Requires: Authentication
     """
-    return await transaction_service.create_transaction(data, current_user)
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = "Wed, 30 Sep 2026 23:59:59 GMT"
+
+    if data.type == TransactionType.IN:
+        operation_type = OperationType.PURCHASE
+        items = [
+            OperationItemCreateRequest(
+                product_id=data.product_id,
+                type=TransactionType.IN,
+                warehouse_id=data.des_warehouse_id,
+                quantity=data.quantity,
+            )
+        ]
+    elif data.type == TransactionType.OUT:
+        operation_type = OperationType.SALE
+        items = [
+            OperationItemCreateRequest(
+                product_id=data.product_id,
+                type=TransactionType.OUT,
+                warehouse_id=data.origin_warehouse_id,
+                quantity=data.quantity,
+            )
+        ]
+    else:
+        operation_type = OperationType.TRANSFER
+        items = [
+            OperationItemCreateRequest(
+                product_id=data.product_id,
+                type=TransactionType.OUT,
+                warehouse_id=data.origin_warehouse_id,
+                quantity=data.quantity,
+            ),
+            OperationItemCreateRequest(
+                product_id=data.product_id,
+                type=TransactionType.IN,
+                warehouse_id=data.des_warehouse_id,
+                quantity=data.quantity,
+            ),
+        ]
+
+    operation = await operation_service.create_operation(
+        OperationCreateRequest(
+            operation_type=operation_type,
+            source_warehouse_id=data.origin_warehouse_id,
+            destination_warehouse_id=data.des_warehouse_id,
+            reference_code="legacy-transaction-adapter",
+            note=data.note,
+            items=items,
+        ),
+        current_user,
+    )
+
+    await operation_service.complete_operation(operation.id, current_user=current_user)
+
+    transactions = await transaction_service.list_transactions_by_operation(
+        operation_id=operation.id,
+        current_user=current_user,
+    )
+    if not transactions.transactions:
+        raise RuntimeError("Operation completed but no transaction entries were found")
+    return transactions.transactions[0]
 
 
 @router.get("/", response_model=TransactionListResponse)
@@ -70,7 +134,7 @@ async def list_transactions(
     - Product name and SKU
     - Warehouse names (origin and/or destination)
     - User who created the transaction
-    - Transaction type, quantity, notes, and timestamp
+    - Transaction type, quantity, note, and timestamp
     
     Filters:
     - **type**: Filter by transaction type (In, Out, Transfer)

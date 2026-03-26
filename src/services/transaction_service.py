@@ -46,185 +46,11 @@ class TransactionService:
     async def create_transaction(
         self, data: TransactionCreateRequest, current_user: User
     ) -> TransactionResponse:
-        """
-        Create a new inventory transaction (stock movement).
-        
-        Args:
-            data: Transaction creation request data
-            current_user: The authenticated user
-            
-        Returns:
-            TransactionResponse with created transaction information
-            
-        Raises:
-            HTTPException: If validation fails or insufficient stock
-        """
-        # Validate product exists and belongs to tenant
-        product_check = await self._conn.fetchrow(
-            "SELECT id FROM products WHERE id = $1 AND tenant_id = $2",
-            data.product_id,
-            current_user.tenant_id,
+        """Direct transaction writes are deprecated in favor of operation workflows."""
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Direct transaction creation is deprecated. Use /api/operations instead.",
         )
-        if not product_check:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Product with ID {data.product_id} not found",
-            )
-
-        # Validate warehouses and transaction type logic
-        if data.type == TransactionType.IN:
-            if not data.des_warehouse_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="des_warehouse_id is required for IN transactions",
-                )
-            # Verify destination warehouse exists
-            dest_wh = await self._warehouse_repo.get_by_id(
-                warehouse_id=data.des_warehouse_id,
-                tenant_id=current_user.tenant_id,
-            )
-            if not dest_wh:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Destination warehouse with ID {data.des_warehouse_id} not found",
-                )
-
-        elif data.type == TransactionType.OUT:
-            if not data.origin_warehouse_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="origin_warehouse_id is required for OUT transactions",
-                )
-            # Verify origin warehouse exists
-            origin_wh = await self._warehouse_repo.get_by_id(
-                warehouse_id=data.origin_warehouse_id,
-                tenant_id=current_user.tenant_id,
-            )
-            if not origin_wh:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Origin warehouse with ID {data.origin_warehouse_id} not found",
-                )
-
-        elif data.type == TransactionType.TRANSFER:
-            if not data.origin_warehouse_id or not data.des_warehouse_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Both origin_warehouse_id and des_warehouse_id are required for TRANSFER transactions",
-                )
-            if data.origin_warehouse_id == data.des_warehouse_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Origin and destination warehouses must be different for transfers",
-                )
-            # Verify both warehouses exist
-            origin_wh = await self._warehouse_repo.get_by_id(
-                warehouse_id=data.origin_warehouse_id,
-                tenant_id=current_user.tenant_id,
-            )
-            dest_wh = await self._warehouse_repo.get_by_id(
-                warehouse_id=data.des_warehouse_id,
-                tenant_id=current_user.tenant_id,
-            )
-            if not origin_wh:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Origin warehouse with ID {data.origin_warehouse_id} not found",
-                )
-            if not dest_wh:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Destination warehouse with ID {data.des_warehouse_id} not found",
-                )
-
-        # Use transaction to ensure atomicity
-        try:
-            async with self._conn.transaction():
-                # Update stock levels based on transaction type
-                
-                if data.type == TransactionType.IN:
-                    await self._stock_repo.increment(
-                        product_id=data.product_id,
-                        warehouse_id=data.des_warehouse_id,
-                        qty=data.quantity,
-                        conn=self._conn,
-                    )
-                elif data.type == TransactionType.OUT:
-                    await self._stock_repo.decrement(
-                        product_id=data.product_id,
-                        warehouse_id=data.origin_warehouse_id,
-                        qty=data.quantity,
-                        conn=self._conn,
-                    )
-                elif data.type == TransactionType.TRANSFER:
-                    await self._stock_repo.decrement(
-                        product_id=data.product_id,
-                        warehouse_id=data.origin_warehouse_id,
-                        qty=data.quantity,
-                        conn=self._conn,
-                    )
-                    await self._stock_repo.increment(
-                        product_id=data.product_id,
-                        warehouse_id=data.des_warehouse_id,
-                        qty=data.quantity,
-                        conn=self._conn,
-                    )
-            
-
-                # Record the transaction
-                await self._transaction_repo.record(
-                    tenant_id=current_user.tenant_id,
-                    product_id=data.product_id,
-                    type=data.type,
-                    quantity=data.quantity,
-                    origin_warehouse_id=data.origin_warehouse_id,
-                    des_warehouse_id=data.des_warehouse_id,
-                    user_id=current_user.id,
-                    notes=data.notes,
-                    conn=self._conn,
-                )
-
-        except ValueError as e:
-            # Catch insufficient stock errors from decrement
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e),
-            )
-
-        # Fetch and return the detailed transaction
-        transaction = await self._conn.fetchrow(
-            """
-            SELECT 
-                t.id, 
-                t.tenant_id, 
-                t.type, 
-                t.product_id,
-                p.name AS product_name,
-                p.sku AS product_sku,
-                t.quantity,
-                t.origin_warehouse_id,
-                ow.name AS origin_warehouse_name,
-                t.des_warehouse_id,
-                dw.name AS des_warehouse_name,
-                t.user_id,
-                u.name AS user_name,
-                t.notes,
-                t.timestamp
-            FROM inventory_transactions t
-            JOIN products p ON t.product_id = p.id
-            LEFT JOIN warehouses ow ON t.origin_warehouse_id = ow.id
-            LEFT JOIN warehouses dw ON t.des_warehouse_id = dw.id
-            LEFT JOIN users u ON t.user_id = u.id
-            WHERE t.tenant_id = $1 AND t.product_id = $2 AND t.user_id = $3
-            ORDER BY t.timestamp DESC
-            LIMIT 1
-            """,
-            current_user.tenant_id,
-            data.product_id,
-            current_user.id,
-        )
-
-        return TransactionResponse(**transaction)
 
     async def get_transaction_by_id(
         self, transaction_id: int, current_user: User
@@ -281,4 +107,20 @@ class TransactionService:
             total=len(transactions),
             limit=filters.limit,
             offset=filters.offset,
+        )
+
+    async def list_transactions_by_operation(
+        self,
+        operation_id: int,
+        current_user: User,
+    ) -> TransactionListResponse:
+        transactions = await self._transaction_repo.list_by_operation(
+            operation_id=operation_id,
+            tenant_id=current_user.tenant_id,
+        )
+        return TransactionListResponse(
+            transactions=transactions,
+            total=len(transactions),
+            limit=len(transactions),
+            offset=0,
         )

@@ -116,12 +116,13 @@ class UserRepository(IUserRepository):
         )
         return result == "DELETE 1"
 
-    async def update_password(self, user_id: int, password_hash: str) -> bool:
+    async def update_password(self, user_id: int, tenant_id: int, password_hash: str) -> bool:
         """Update user's password hash."""
         result = await self._conn.execute(
-            "UPDATE users SET password_hash = $1 WHERE id = $2",
+            "UPDATE users SET password_hash = $1 WHERE id = $2 AND tenant_id = $3",
             password_hash,
             user_id,
+            tenant_id,
         )
         return result == "UPDATE 1"
 

@@ -6,14 +6,65 @@ import { API_BASE_URL, STORAGE_KEYS } from './config';
 
 export class ApiError extends Error {
   status: number;
-  details?: any;
+  details?: unknown;
 
-  constructor(status: number, message: string, details?: any) {
+  constructor(status: number, message: string, details?: unknown) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.details = details;
   }
+}
+
+function detailsToMessage(details: unknown): string | null {
+  if (!details || typeof details !== 'object') {
+    return null;
+  }
+
+  const detailsRecord = details as Record<string, unknown>;
+
+  if (typeof detailsRecord.detail === 'string' && detailsRecord.detail.trim()) {
+    return detailsRecord.detail;
+  }
+
+  if (typeof detailsRecord.message === 'string' && detailsRecord.message.trim()) {
+    return detailsRecord.message;
+  }
+
+  const errors = detailsRecord.errors;
+  if (errors && typeof errors === 'object') {
+    const firstFieldErrors = Object.values(errors as Record<string, unknown>)[0];
+    if (Array.isArray(firstFieldErrors) && firstFieldErrors.length > 0) {
+      const firstMessage = firstFieldErrors[0];
+      if (typeof firstMessage === 'string' && firstMessage.trim()) {
+        return firstMessage;
+      }
+    }
+  }
+
+  return null;
+}
+
+export function getErrorMessage(error: unknown, fallback = 'An error occurred'): string {
+  if (error instanceof ApiError) {
+    const detailMessage = detailsToMessage(error.details);
+    if (detailMessage) {
+      return detailMessage;
+    }
+    if (error.message.trim()) {
+      return error.message;
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+
+  return fallback;
 }
 
 interface RequestOptions extends RequestInit {
@@ -41,7 +92,7 @@ export async function apiFetch<T>(
       requestHeaders['Authorization'] = `Bearer ${token}`;
     }
   }
-
+  console.log(`Making API request to: ${API_BASE_URL}${endpoint} with options:`)
   const url = `${API_BASE_URL}${endpoint}`;
   console.log(`Making API request to: ${url} with options`)
   try {
@@ -111,6 +162,21 @@ export function apiPut<T>(
 ): Promise<T> {
   return apiFetch<T>(endpoint, {
     method: 'PUT',
+    body: JSON.stringify(data),
+    requiresAuth,
+  });
+}
+
+/**
+ * Helper for PATCH requests
+ */
+export function apiPatch<T>(
+  endpoint: string,
+  data: any,
+  requiresAuth = false
+): Promise<T> {
+  return apiFetch<T>(endpoint, {
+    method: 'PATCH',
     body: JSON.stringify(data),
     requiresAuth,
   });

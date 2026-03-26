@@ -17,8 +17,10 @@ from services.dashboard_service import DashboardService
 from services.product_service import ProductService
 from services.warehouse_service import WarehouseService
 from services.transaction_service import TransactionService
+from services.operation_service import OperationService
 from services.user_service import UserService
 from services.category_service import CategoryService
+from services.tenant_service import TenantService
 
 security = HTTPBearer()
 
@@ -68,6 +70,12 @@ async def get_transaction_service(
 ) -> TransactionService:
     return TransactionService(conn)
 
+
+async def get_operation_service(
+    conn: asyncpg.Connection = Depends(get_connection),
+) -> OperationService:
+    return OperationService(conn)
+
 async def get_user_service(
     conn: asyncpg.Connection = Depends(get_connection),
 ) -> UserService:
@@ -77,3 +85,9 @@ async def get_category_service(
     conn: asyncpg.Connection = Depends(get_connection),
 ) -> CategoryService:
     return CategoryService(conn)
+
+
+async def get_tenant_service(
+    conn: asyncpg.Connection = Depends(get_connection),
+) -> TenantService:
+    return TenantService(conn)

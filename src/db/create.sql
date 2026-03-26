@@ -97,7 +97,7 @@ CREATE TABLE public.inventory_transactions (
     "timestamp" timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     origin_warehouse_id integer,
     des_warehouse_id integer,
-    notes text,
+    note text,
     CONSTRAINT chk_in_requires_dest CHECK (((type <> 'In'::public.transaction_type) OR (des_warehouse_id IS NOT NULL))),
     CONSTRAINT chk_out_requires_origin CHECK (((type <> 'Out'::public.transaction_type) OR (origin_warehouse_id IS NOT NULL))),
     CONSTRAINT chk_transfer_different_warehouses CHECK (((type <> 'Transfer'::public.transaction_type) OR (origin_warehouse_id <> des_warehouse_id))),
@@ -388,7 +388,7 @@ COPY public.categories (id, tenant_id, name, parent_id) FROM stdin;
 -- Data for Name: inventory_transactions; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.inventory_transactions (id, tenant_id, product_id, user_id, type, quantity, "timestamp", origin_warehouse_id, des_warehouse_id, notes) FROM stdin;
+COPY public.inventory_transactions (id, tenant_id, product_id, user_id, type, quantity, "timestamp", origin_warehouse_id, des_warehouse_id, note) FROM stdin;
 10	1	6	1	Out	10	2026-03-05 02:58:32.761258+07	10	\N	Sold items
 11	1	7	1	Out	10	2026-03-05 02:58:32.761258+07	10	\N	Sold items
 12	1	8	1	Out	10	2026-03-05 02:58:32.761258+07	10	\N	Sold items

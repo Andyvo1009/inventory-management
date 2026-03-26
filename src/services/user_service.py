@@ -228,7 +228,7 @@ class UserService:
 
         # Hash and update password
         password_hash = hash_password(data.new_password)
-        success = await self._user_repo.update_password(user_id, password_hash)
+        success = await self._user_repo.update_password(user_id, current_user.tenant_id, password_hash)
 
         if not success:
             raise HTTPException(
